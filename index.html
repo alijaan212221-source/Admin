@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+h<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f6fa; margin: 0; }
+        .container { max-width: 500px; margin: 3rem auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 2rem; }
+        h2 { color: #2d3e50; text-align: center; }
+        .input { width: 100%; padding: 0.7rem; margin-bottom: 1rem; border-radius: 6px; border: 1px solid #b0bec5; font-size: 1rem; }
+        .btn { width: 100%; padding: 0.7rem; background: #2d3e50; color: #fff; border: none; border-radius: 6px; font-size: 1.1rem; font-weight: 500; cursor: pointer; }
+        .btn:hover { background: #009688; }
+        .user-table { width: 100%; border-collapse: collapse; margin-top: 2rem; }
+        .user-table th, .user-table td { border: 1px solid #b0bec5; padding: 0.5rem; text-align: left; }
+        .user-table th { background: #e0f7fa; }
+        .logout { margin-top: 1.5rem; text-align: center; }
+        .logout button { background: #b71c1c; }
+        /* Dashboard cards */
+        .dashboard-card {
+            flex: 1;
+            min-width: 160px;
+            border-radius: 10px;
+            padding: 1.2rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .dashboard-card div {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        /* User details modal */
+        #user-details-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+        }
+        #user-details-modal > div {
+            background: #fff;
+            padding: 2rem 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            min-width: 340px;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="login-section">
+        <h2>Admin Login</h2>
+        <input type="text" id="admin-username" class="input" placeholder="Admin Username">
+        <input type="password" id="admin-password" class="input" placeholder="Password">
+        <button class="btn" onclick="adminLogin()">Login</button>
+    </div>
+    <div class="container" id="dashboard-section" style="display:none;">
+        <h2>Admin Dashboard</h2>
+        <div id="pending-requests-section" style="margin-bottom:2rem;"></div>
+        <div id="dashboard-cards" style="display:flex; gap:1.5rem; margin-bottom:2rem; flex-wrap:wrap;"></div>
+        <div id="user-list-section">
+            <h3>Registered Users</h3>
+            <table class="user-table" id="user-table">
+                <thead>
+                    <tr><th>Username</th><th>Phone</th><th>Referral Code</th><th>Referred By</th><th>Wallet</th><th>Plan</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="user-table-body">
+                </tbody>
+            </table>
+        </div>
+        <div id="user-details-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:3000; justify-content:center; align-items:center;">
+            <div style="background:#fff; padding:2rem 2.5rem; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,0.15); min-width:340px; max-width:90vw; max-height:90vh; overflow:auto; position:relative;">
+                <span onclick="closeUserDetails()" style="position:absolute; top:10px; right:18px; font-size:1.5rem; cursor:pointer;">&times;</span>
+                <div id="user-details-content"></div>
+            </div>
+        </div>
+        <div class="logout">
+            <button class="btn" onclick="adminLogout()">Logout</button>
+        </div>
+    </div>
+    <script>
+        // Simple admin credentials (fixed)
+        const ADMIN_USER = 'ali';
+        const ADMIN_PASS = '8090';
+        function adminLogin() {
+            const user = document.getElementById('admin-username').value.trim();
+            const pass = document.getElementById('admin-password').value.trim();
+            if (user === ADMIN_USER && pass === ADMIN_PASS) {
+                localStorage.setItem('adminLoggedIn', 'true');
+                document.getElementById('login-section').style.display = 'none';
+                document.getElementById('dashboard-section').style.display = 'block';
+                loadUsers();
+            } else {
+                alert('Invalid admin credentials!');
+            }
+        }
+        function adminLogout() {
+            localStorage.removeItem('adminLoggedIn');
+            document.getElementById('dashboard-section').style.display = 'none';
+            document.getElementById('login-section').style.display = 'block';
+        // On page load, check admin login state
+        window.onload = function() {
+            if (localStorage.getItem('adminLoggedIn') === 'true') {
+                document.getElementById('login-section').style.display = 'none';
+                document.getElementById('dashboard-section').style.display = 'block';
+                loadUsers();
+            }
+        }
+        }
+        function loadDashboardCards(userDB) {
+            let totalUsers = Object.keys(userDB).length;
+            let totalDeposits = 0, totalWithdrawals = 0, activePlans = 0;
+            Object.values(userDB).forEach(u => {
+                if (u.deposits) u.deposits.forEach(d => totalDeposits += Number(d.amount||0));
+                if (u.withdrawals) u.withdrawals.forEach(w => totalWithdrawals += Number(w.amount||0));
+                if (u.plan) activePlans++;
+            });
+            document.getElementById('dashboard-cards').innerHTML = `
+                <div class='dashboard-card' style='background:#e0f7fa;'><div>${totalUsers}</div><div>Total Users</div></div>
+                <div class='dashboard-card' style='background:#fff3e0;'><div>${totalDeposits}</div><div>Total Deposits</div></div>
+                <div class='dashboard-card' style='background:#fce4ec;'><div>${totalWithdrawals}</div><div>Total Withdrawals</div></div>
+                <div class='dashboard-card' style='background:#e8f5e9;'><div>${activePlans}</div><div>Active Plans</div></div>
+            `;
+        }
+        // Load users from localStorage (shared with user.html)
+        function loadUsers() {
+            let userDB = {};
+            try {
+                userDB = JSON.parse(localStorage.getItem('userDB')) || {};
+            } catch (e) { userDB = {}; }
+            loadDashboardCards(userDB);
+            renderPendingRequests(userDB);
+            const tbody = document.getElementById('user-table-body');
+            tbody.innerHTML = '';
+            Object.keys(userDB).forEach(username => {
+                const u = userDB[username];
+                let bound = '';
+                if (u.boundAccount) {
+                  bound = `${u.boundAccount.method || ''}<br>${u.boundAccount.name || ''}<br>${u.boundAccount.number || ''}`;
+                }
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${username}</td>
+                    <td><input type='text' value='${u.phone || ''}' style='width:90px' onchange='updateUserField("${username}","phone",this.value)'></td>
+                    <td>${u.referralCode || ''}</td>
+                    <td>${u.referredBy || ''}</td>
+                    <td><input type='number' value='${u.wallet || 0}' style='width:70px' onchange='updateUserField("${username}","wallet",this.value)'></td>
+                    <td><select onchange='updateUserField("${username}","plan",this.value)'>
+                        <option value="">None</option>
+                        <option value="600" ${u.plan==600?'selected':''}>600</option>
+                        <option value="1200" ${u.plan==1200?'selected':''}>1200</option>
+                        <option value="2400" ${u.plan==2400?'selected':''}>2400</option>
+                        <option value="4500" ${u.plan==4500?'selected':''}>4500</option>
+                        <option value="7000" ${u.plan==7000?'selected':''}>7000</option>
+                        <option value="10000" ${u.plan==10000?'selected':''}>10000</option>
+                    </select></td>
+                    <td>${bound}</td>
+                    <td>
+                        <button onclick='saveUserEdit("${username}")'>Save</button>
+                        <button onclick='deleteUser("${username}")' style='color:#b71c1c;'>Delete</button>
+                        <button onclick='viewUserDetails("${username}")' style='background:#009688; color:#fff; border:none; border-radius:4px; padding:0.3rem 0.7rem; margin-left:0.5rem;'>View Details</button>
+                    </td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderPendingRequests(userDB) {
+            let html = '';
+            // Gather all pending deposits and withdrawals
+            let pendingDeposits = [];
+            let pendingWithdrawals = [];
+            Object.keys(userDB).forEach(username => {
+                const u = userDB[username];
+                if (u.deposits) {
+                    u.deposits.forEach((d, idx) => {
+                        if (d.status === 'pending') {
+                            pendingDeposits.push({username, idx, ...d});
+                        }
+                    });
+                }
+                if (u.withdrawals) {
+                    u.withdrawals.forEach((w, idx) => {
+                        if (w.status === 'pending') {
+                            pendingWithdrawals.push({username, idx, ...w});
+                        }
+                    });
+                }
+            });
+            if (pendingDeposits.length) {
+                html += `<div style='margin-bottom:1.2rem;'><b>Pending Deposits</b><ul style='list-style:none; padding:0;'>`;
+                pendingDeposits.forEach(d => {
+                    html += `<li style='margin-bottom:0.5rem;'>
+                        <b>${d.username}</b>: ${d.method} - ${d.amount} PKR - TID: ${d.tid} 
+                        <button onclick='approveDeposit("${d.username}",${d.idx})' style='background:#388e3c; color:#fff; border:none; border-radius:4px; margin-left:0.7rem;'>Approve</button>
+                        <button onclick='rejectDeposit("${d.username}",${d.idx})' style='background:#b71c1c; color:#fff; border:none; border-radius:4px; margin-left:0.5rem;'>Reject</button>
+                    </li>`;
+                });
+                html += `</ul></div>`;
+            }
+            if (pendingWithdrawals.length) {
+                html += `<div style='margin-bottom:1.2rem;'><b>Pending Withdrawals</b><ul style='list-style:none; padding:0;'>`;
+                pendingWithdrawals.forEach(w => {
+                    html += `<li style='margin-bottom:0.5rem;'>
+                        <b>${w.username}</b>: ${w.amount} PKR 
+                        <button onclick='approveWithdrawal("${w.username}",${w.idx})' style='background:#388e3c; color:#fff; border:none; border-radius:4px; margin-left:0.7rem;'>Approve</button>
+                        <button onclick='rejectWithdrawal("${w.username}",${w.idx})' style='background:#b71c1c; color:#fff; border:none; border-radius:4px; margin-left:0.5rem;'>Reject</button>
+                    </li>`;
+                });
+                html += `</ul></div>`;
+            }
+            if (!pendingDeposits.length && !pendingWithdrawals.length) {
+                html = `<div style='color:#388e3c; margin-bottom:1.2rem;'>No pending deposit or withdrawal requests.</div>`;
+            }
+            document.getElementById('pending-requests-section').innerHTML = html;
+        }
+
+        function approveDeposit(username, idx) {
+            let userDB = {};
+            try { userDB = JSON.parse(localStorage.getItem('userDB')) || {}; } catch(e) { userDB = {}; }
+            const d = userDB[username].deposits[idx];
+            d.status = 'approved';
+            userDB[username].wallet = (userDB[username].wallet || 0) + Number(d.amount);
+            localStorage.setItem('userDB', JSON.stringify(userDB));
+            loadUsers();
+        }
+        function rejectDeposit(username, idx) {
+            let userDB = {};
+            try { userDB = JSON.parse(localStorage.getItem('userDB')) || {}; } catch(e) { userDB = {}; }
+            userDB[username].deposits[idx].status = 'rejected';
+            localStorage.setItem('userDB', JSON.stringify(userDB));
+            loadUsers();
+        }
+        function approveWithdrawal(username, idx) {
+            let userDB = {};
+            try { userDB = JSON.parse(localStorage.getItem('userDB')) || {}; } catch(e) { userDB = {}; }
+            userDB[username].withdrawals[idx].status = 'approved';
+            localStorage.setItem('userDB', JSON.stringify(userDB));
+            loadUsers();
+        }
+        function rejectWithdrawal(username, idx) {
+            let userDB = {};
+            try { userDB = JSON.parse(localStorage.getItem('userDB')) || {}; } catch(e) { userDB = {}; }
+            // Refund wallet if rejected
+            const w = userDB[username].withdrawals[idx];
+            userDB[username].wallet = (userDB[username].wallet || 0) + Number(w.amount);
+            w.status = 'rejected';
+            localStorage.setItem('userDB', JSON.stringify(userDB));
+            loadUsers();
+        }
+        function viewUserDetails(username) {
+            let userDB = {};
+            try {
+                userDB = JSON.parse(localStorage.getItem('userDB')) || {};
+            } catch (e) { userDB = {}; }
+            const u = userDB[username];
+            if (!u) return;
+                        let html = `<h3 style='color:#2d3e50;'>${username} Details</h3>`;
+                        html += `<div style='margin-bottom:1rem;'><b>Phone:</b> ${u.phone || ''} | <b>Referral Code:</b> ${u.referralCode || ''} | <b>Referred By:</b> ${u.referredBy || ''}</div>`;
+                        html += `<div style='margin-bottom:1rem;'><b>Wallet:</b> ${u.wallet || 0} | <b>Plan:</b> ${u.plan || 'None'}</div>`;
+                        if (u.boundAccount) {
+                            html += `<div style='margin-bottom:1rem;'><b>Bound Account:</b> ${u.boundAccount.method || ''} | ${u.boundAccount.name || ''} | ${u.boundAccount.number || ''}</div>`;
+                        }
+            html += `<h4>Deposits</h4>`;
+            if (u.deposits && u.deposits.length) {
+                html += `<table style='width:100%; margin-bottom:1rem;'><tr><th>Method</th><th>TID</th><th>Amount</th><th>Date</th></tr>`;
+                u.deposits.forEach(d => {
+                    html += `<tr><td>${d.method||''}</td><td>${d.tid||''}</td><td>${d.amount||''}</td><td>${d.date?new Date(d.date).toLocaleString():''}</td></tr>`;
+                });
+                html += `</table>`;
+            } else {
+                html += `<div style='color:#888;'>No deposits</div>`;
+            }
+            html += `<h4>Withdrawals</h4>`;
+            if (u.withdrawals && u.withdrawals.length) {
+                html += `<table style='width:100%; margin-bottom:1rem;'><tr><th>Amount</th><th>Date</th></tr>`;
+                u.withdrawals.forEach(w => {
+                    html += `<tr><td>${w.amount||''}</td><td>${w.date?new Date(w.date).toLocaleString():''}</td></tr>`;
+                });
+                html += `</table>`;
+            } else {
+                html += `<div style='color:#888;'>No withdrawals</div>`;
+            }
+            html += `<h4>Tasks</h4>`;
+            if (u.tasks && u.tasks.length) {
+                html += `<table style='width:100%; margin-bottom:1rem;'><tr><th>Earning</th><th>Date</th></tr>`;
+                u.tasks.forEach(t => {
+                    html += `<tr><td>${t.earning||''}</td><td>${t.date?new Date(t.date).toLocaleString():''}</td></tr>`;
+                });
+                html += `</table>`;
+            } else {
+                html += `<div style='color:#888;'>No tasks completed</div>`;
+            }
+            document.getElementById('user-details-content').innerHTML = html;
+            document.getElementById('user-details-modal').style.display = 'flex';
+        }
+        function closeUserDetails() {
+            document.getElementById('user-details-modal').style.display = 'none';
+        }
+        // Store edits temporarily
+        let userEdits = {};
+        function updateUserField(username, field, value) {
+            if (!userEdits[username]) userEdits[username] = {};
+            userEdits[username][field] = value;
+        }
+        function saveUserEdit(username) {
+            let userDB = {};
+            try {
+                userDB = JSON.parse(localStorage.getItem('userDB')) || {};
+            } catch (e) { userDB = {}; }
+            if (!userDB[username]) return;
+            const edits = userEdits[username] || {};
+            Object.keys(edits).forEach(field => {
+                if (field === 'wallet' || field === 'plan') {
+                    userDB[username][field] = Number(edits[field]);
+                } else {
+                    userDB[username][field] = edits[field];
+                }
+            });
+            localStorage.setItem('userDB', JSON.stringify(userDB));
+            userEdits[username] = {};
+            loadUsers();
+            alert('User updated!');
+        }
+        function deleteUser(username) {
+            if (!confirm('Delete user ' + username + '?')) return;
+            let userDB = {};
+            try {
+                userDB = JSON.parse(localStorage.getItem('userDB')) || {};
+            } catch (e) { userDB = {}; }
+            delete userDB[username];
+            localStorage.setItem('userDB', JSON.stringify(userDB));
+            loadUsers();
+        }
+    </script>
+</body>
+</html>
